@@ -1,13 +1,13 @@
 services:
   app:
-    container_name: app
     build: .
+    env_file:
+      - .env
     ports:
-      - "3000:3000"
+      - "3000"
     environment:
       DATABASE_URL: postgresql://dotnovi:devops123@db:5432/dotnovi # local only, save to commit
   db:
-    container_name: db
     image: postgres:18-alpine # docs: https://hub.docker.com/_/postgres
     environment:
       POSTGRES_USER: dotnovi # local only, save to commit
