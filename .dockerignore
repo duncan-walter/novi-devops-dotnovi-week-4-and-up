@@ -1,0 +1,13 @@
+.env*
+.eslintrc.json
+.git
+.gitignore
+.idea
+eslint.config.js
+jest.config.js
+*.md
+
+node_modules/
+opdrachten/
+tekstuele-opdracht-uitwerkingen/
+tests/
