@@ -1,33 +1,23 @@
-# Single-stage Dockerfile for dotNOVI application
-# This is the student version for Learning Docker
+# Optimized build
+FROM node:20-alpine AS build
 
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only-production
+
+# Runtime stage
 FROM node:20-alpine
 
-# Metadata
-LABEL maintainer="NOVI Hogeschool"
-LABEL description="dotNOVI - Node.js application for NOVI DevOps course"
-
-# Set working directory
 WORKDIR /app
+RUN addgroup -g 1001 nodejs && \
+     adduser -S nodejs -u 1001
 
-# Copy package files
-COPY package*.json ./
+# Copy van build
+COPY --from=build --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --chown=nodejs:nodejs src ./src
 
-# Install production dependencies
-RUN npm ci
+USER nodejs
 
-# Copy application code
-COPY src ./src
-
-# Don't run as root (security best practice)
-USER node
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
-
-# Expose port
 EXPOSE 3000
 
-# Run application
 CMD ["node", "src/index.js"]

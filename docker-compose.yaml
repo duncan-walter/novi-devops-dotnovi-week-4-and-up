@@ -1,0 +1,18 @@
+services:
+  app:
+    container_name: app
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://dotnovi:devops123@db:5432/dotnovi # local only, save to commit
+  db:
+    container_name: db
+    image: postgres:18-alpine # docs: https://hub.docker.com/_/postgres
+    environment:
+      POSTGRES_USER: dotnovi # local only, save to commit
+      POSTGRES_PASSWORD: devops123 # local only, save to commit
+      POSTGRES_DB: dotnovi # local only, save to commit
+    volumes:
+      - ./db-data:/var/lib/postgresql # Data
+      - ./src/db/init.sql:/docker-entrypoint-initdb.d/init.sql # Init script
