@@ -15,7 +15,9 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18, 20, 24]
+        # Invert the boolean below to use multiple or single matrix strategy mode
+        # This could be improved upon in such a way that this workflow does not have to be edited to achieve the desired mode
+        node-version: ${{ fromJSON(true && '[18, 20, 24]' || '[20]')}}
 
     steps:
       - name: Checkout repository
@@ -35,3 +37,18 @@ jobs:
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          flags: node-version-${{ matrix.node-version }}
+          name: coverage-node-version-${{ matrix.node-version }}
+
+  deploy:
+    name: Deploy to production
+    needs: [ test-and-lint ]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy
+        run: |
+          echo "Simulating deployment..."
+          sleep 3
+          echo "Done!"
