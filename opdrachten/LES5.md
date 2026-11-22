@@ -1,470 +1,201 @@
-# Les 5: Continuous Deployment & Release Management
+# Les 5 – Cloud Deployment met Microsoft Azure
 
-## Doelstellingen
+## Ronde 1 – Maak het werkend
 
-In deze les leer je:
-- Continuous Deployment (CD) basisbegrippen
-- Docker image publishing
-- Automated deployments
-- Rollback strategies
-- Dependency management
+**Tijdens de les: 65 minuten praktijkwerk**  
+**Praktijk A:** 40 minuten · **Praktijk B:** 25 minuten
 
-## CI/CD Pipeline Overview
+In de vorige lessen heb je de **dotNOVI-applicatie** gecontaineriseerd en een CI-pipeline gemaakt met GitHub Actions. Nu ga je de applicatie deployen naar **Microsoft Azure** en ervoor zorgen dat nieuwe, succesvol gecontroleerde codewijzigingen automatisch worden uitgerold.
 
-```
-Source Code (Git)
-        │
-        ▼
-Continuous Integration (Les 4)
-├─ Lint
-├─ Test
-├─ Build
-└─ Security Scan
-        │
-        ▼
-Continuous Deployment (Les 5)
-├─ Build Docker Image
-├─ Push to Registry
-├─ Run Smoke Tests
-└─ Deploy to Production
-        │
-        ▼
-Continuous Monitoring (Les 8)
-├─ Health Checks
-├─ Performance Metrics
-└─ Error Tracking
-        │
-        ▼
-       Users
-```
+Je voert deze oefening in twee stappen uit:
 
-## Continuous Deployment (CD)
+- **Praktijk A:** publiceer een Docker-image naar Azure Container Registry (ACR) en deploy deze handmatig naar Azure Container Apps.
+- **Praktijk B:** breid je bestaande GitHub Actions-workflow uit zodat nieuwe versies automatisch worden gepubliceerd en gedeployed.
 
-CD automatiseert het deployen van code die de CI stage heeft gepasseerd naar production.
+Deze eerste ronde draait om het **werkend krijgen van de volledige keten**. Je mag de hulpdocumenten en ondersteuning van de docent gebruiken. In **ronde 2 (huiswerk)** bouw je de infrastructuur opnieuw op, met strengere eisen en minder begeleiding.
 
-### Push vs Pull Deployment
+## Wat heb je al voorbereid?
 
-```
-PUSH Model:
-┌──────────────┐
-│ CI/CD Server │ ─SSH/API─► Production Server
-│ (GitHub)     │           (Deploy application)
-└──────────────┘
+Na les 4 heb je als voorbereiding:
 
-PULL Model:
-┌──────────────┐        ┌────────────────┐
-│ Production   │ ◄─Poll─│ CI/CD Server   │
-│ Server       │        │ (Check updates)│
-│ (Deploy app) │        └────────────────┘
-└──────────────┘
-```
+- Een actief **Azure for Students-account** en een werkende dotNOVI-repository.
+- Een Dockerfile en werkende GitHub Actions **CI-pipeline** voor dotNOVI.
+- Een Azure Resource Group `rg-dotnovi-lab`.
+- Een user-assigned managed identity `id-github-dotnovi`, met een federated credential voor jouw GitHub-repository en deploymentbranch.
+- De benodigde Azure-rol voor het bijwerken van Container Apps in je Resource Group.
+- De GitHub Actions-secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` en `AZURE_SUBSCRIPTION_ID`.
+- Een **geslaagde OIDC-login-test** vanuit GitHub Actions.
 
-## Docker Image Publishing
+Als je voorbereiding niet werkt, meld dit aan de docent voordat je begint. Gebruik geen langdurige Azure-wachtwoorden als snelle vervanging.
 
-### Container Registries
+> **Database:** in deze les richt je nog geen PostgreSQL-database in Azure in. dotNOVI kan als HTTP-service draaien zonder werkende databaseverbinding. Daarom is `/health/live` het controlepunt voor deze ronde; `/health/ready` kan terecht **HTTP 503** retourneren.
 
-```
-Docker Hub (public)
-  ├─ Free tier: 1 private repo
-  └─ Paid: Unlimited repos
+---
 
-GitHub Container Registry (GHCR)
-  ├─ Free: Public + Private
-  └─ Integrated with GitHub
+## Praktijk A – Eerste clouddeployment (40 minuten)
 
-Azure Container Registry (ACR)
-  └─ Microsoft Azure
+### A1 – Maak een Azure Container Registry aan
 
-Amazon ECR
-  └─ AWS
+Een registry slaat containerimages op zodat Azure Container Apps ze kan ophalen.
 
-Artifactory
-  └─ Enterprise
+Maak via de Azure Portal in je bestaande Resource Group een **Azure Container Registry (ACR)** aan:
+
+| Instelling | Waarde |
+| --- | --- |
+| Resource Group | `rg-dotnovi-lab` |
+| Registry name | Een **wereldwijd unieke** naam |
+| Region | West Europe, indien beschikbaar |
+| SKU | Basic |
+| Role assignment permissions mode | **RBAC Registry Permissions** (zonder ABAC) |
+| Admin user | Uitgeschakeld |
+
+Noteer de **Login server** van je registry zoals die in Azure staat weergegeven.
+
+### A2 – Publiceer je Docker-image
+
+Gebruik je bestaande Dockerfile om een image van dotNOVI te bouwen en naar je eigen ACR te publiceren.
+
+Voor de eerste deployment gebruik je de tag **`v1`**.
+
+1. Bouw de image.
+2. Meld Docker aan bij ACR via Azure CLI.
+3. Geef de image de volledige naam die bij jouw registry hoort.
+4. Publiceer de image.
+5. Controleer in ACR of de repository en tag `v1` beschikbaar zijn.
+
+**Hints:** `az acr login`, `docker build`, `docker tag`, `docker push`.
+
+Een imageverwijzing heeft de vorm:
+
+```text
+<acr-login-server>/<repository>:v1
 ```
 
-### Publishing Flow
+### A3 – Deploy naar Azure Container Apps
 
-```dockerfile
-# 1. Tag image
-docker tag dotnovi:latest ghcr.io/username/dotnovi:latest
+Maak een **Container Apps Environment** aan en deploy je gepubliceerde image met een nieuwe **Azure Container App**.
 
-# 2. Login to registry
-docker login ghcr.io
+Gebruik de volgende uitgangspunten:
 
-# 3. Push image
-docker push ghcr.io/username/dotnovi:latest
+| Instelling | Waarde |
+| --- | --- |
+| Resource Group | `rg-dotnovi-lab` |
+| Container Apps Environment | `cae-dotnovi-lab` |
+| Container App | `ca-dotnovi-lab` |
+| Image | Jouw ACR-image met tag `v1` |
+| Hosting | Consumption |
+| Resources | Kleine CPU- en geheugenconfiguratie |
+| Minimum replicas | 0 |
+| Maximum replicas | 1 |
+| Ingress | **External**, HTTP |
+| Target port | De poort waarop Express in de container luistert |
 
-# 4. Others can pull
-docker pull ghcr.io/username/dotnovi:latest
-```
+Voor een **private ACR-image** heeft Container Apps leesrechten nodig. Gebruik hiervoor de aanvullende instructie:
 
-## GitHub Actions CD Workflows
+**[Technische hulp A – Een private ACR-image gebruiken in Azure Container Apps](./LES5_HULP_ACR_PULL.md)**
 
-### Workflow 1: cd.yml - Build & Push
+Hierin configureer je een afzonderlijke managed identity met de benodigde pullrechten. Dat is een andere identiteit dan de identity waarmee GitHub Actions straks naar Azure deployt.
 
-Triggers on main branch push:
-1. Build Docker image
-2. Login to GHCR
-3. Push image with tags
-4. Run vulnerability scan
-5. Trigger deployment workflow
-
-### Workflow 2: deploy-production.yml - Deploy
-
-Triggered by repository_dispatch or manual workflow_dispatch:
-1. Pull image from registry
-2. Deploy to production
-3. Run smoke tests
-4. Notify via Slack
-5. Rollback on failure
-
-### Workflow 3: dependabot.yml - Dependency Updates
-
-Automatically:
-1. Check for dependency updates
-2. Create pull requests
-3. Run CI tests
-4. Auto-merge if tests pass (optional)
-
-## Setup CD
-
-### Stap 1: Setup GHCR Access
-
-```bash
-# Create Personal Access Token (PAT)
-# GitHub Settings → Developer Settings → Personal Access Tokens
-# Scopes needed: read:packages, write:packages, delete:packages
-
-# Export token
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-
-# Login locally
-echo $GITHUB_TOKEN | docker login ghcr.io -u username --password-stdin
-
-# Verify
-docker pull ghcr.io/username/dotnovi:latest
-```
-
-### Stap 2: Setup GitHub Secrets
-
-```
-Repository Settings → Secrets and variables → Actions
-
-Secrets to add:
-- SLACK_WEBHOOK (optional, for notifications)
-- DATABASE_URL_PROD (for production)
-```
-
-### Stap 3: Copy Workflows
-
-```bash
-https://gist.github.com/erikkasimier/87be7004dfa7ceacf9814d9d6136a082
-https://gist.github.com/erikkasimier/bea74a6028fcbca026db9768294569b4
-https://gist.github.com/erikkasimier/7cdb4e7c03a14619e2d74ca08b5e6127
-
-git add .
-git commit -m "ci/cd: add deployment workflows"
-git push origin main
-```
-
-### Stap 4: Monitor Workflow
-
-1. Go to Actions tab
-2. Click on "Continuous Deployment"
-3. Wait for workflow to complete
-4. Check image in GHCR:
-   ```
-   https://github.com/username/dotnovi-app/pkgs/container/dotnovi-app
-   ```
-
-### Stap 5: Manual Deployment
-
-```bash
-# Go to Actions → Deploy to Production
-# Click "Run workflow"
-# Input image tag: ghcr.io/username/dotnovi:latest
-# Click "Run workflow"
-```
-
-## Deployment Strategies
-
-### 1. Blue-Green Deployment
-
-```
-Current (Blue)
-┌─────────────────┐
-│  Production v1  │ ◄── Traffic
-│  (Running)      │
-└─────────────────┘
-
-New (Green)
-┌─────────────────┐
-│  Production v2  │
-│  (Deployed)     │
-└─────────────────┘
-        │
-        ▼
-  Test & Validate
-        │
-        ▼ If OK
-   Switch Traffic
-        │
-        ▼
-┌─────────────────┐
-│  Production v2  │ ◄── Traffic
-│  (Now live)     │
-└─────────────────┘
-```
-
-### 2. Canary Deployment
-
-```
-┌──────────────┐
-│  Production  │
-├──────────────┤
-│ 95% v1       │
-│  5% v2 (new) │
-└──────────────┘
-        │
-   Monitor metrics
-        │
-   If v2 OK:
-        │
-        ▼
-┌──────────────┐
-│  Production  │
-├──────────────┤
-│ 50% v1       │
-│ 50% v2       │
-└──────────────┘
-```
-
-### 3. Rolling Deployment
-
-```
-Pod 1: v1 → v2
-    ↓
-Pod 2: v1 → v2
-    ↓
-Pod 3: v1 → v2
-    ↓
-Pod 4: v1 → v2
-
-Zero downtime
-Gradual rollout
-Easy rollback
-```
-
-## Opdrachten
-
-### Opdracht 1: Manual Docker Push
-
-```bash
-# Build image locally
-docker build -t dotnovi:dev .
-
-# Tag with registry
-docker tag dotnovi:dev ghcr.io/username/dotnovi:dev
-
-# Login (if not already)
-docker login ghcr.io -u username
-
-# Push
-docker push ghcr.io/username/dotnovi:dev
-
-# Verify in GHCR
-curl -H "Authorization: token $GITHUB_TOKEN" \
-  https://api.github.com/user/packages
-```
-
-### Opdracht 2: Semantic Versioning
-
-Implement semantic versioning tags:
-
-```yaml
-- name: Get version from package.json
-  id: version
-  run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
-- name: Push with version tags
-  with:
-    tags: |
-      ghcr.io/${{ github.repository }}:v${{ steps.version.outputs.version }}
-      ghcr.io/${{ github.repository }}:latest
-```
-
-### Opdracht 3: Blue-Green Deployment
-
-Implement in your deployment script:
-
-```bash
-# 1. Deploy to green environment
-docker run -d --name dotnovi-green ...
-
-# 2. Run smoke tests
-if curl -f http://localhost:3001/health; then
-  # 3. Switch load balancer
-  # 4. Stop blue environment
-  docker stop dotnovi-blue
-else
-  # Rollback
-  docker stop dotnovi-green
-fi
-```
-
-### Opdracht 4: Rollback Strategy
-
-Implement automatic rollback:
-
-```yaml
-- name: Deploy
-  id: deploy
-  run: ./deploy.sh
-  continue-on-error: true
-
-- name: Smoke tests
-  run: ./smoke-tests.sh
-  if: steps.deploy.outcome == 'success'
-
-- name: Rollback on failure
-  if: failure()
-  run: ./rollback.sh
-```
-
-### Opdracht 5: Deploy naar Render.com
-
-Deploy je applicatie naar Render.com vanuit je CI/CD pipeline.
-
-```bash
-# 1. Maak een account op https://render.com (gratis tier)
-
-# 2. Maak een nieuwe "Web Service":
-#    - Koppel je GitHub repo, of kies "Deploy an existing image from a registry"
-#    - Als je GHCR gebruikt: image = ghcr.io/<username>/dotnovi-app:latest
-#    - Environment: voeg DATABASE_URL toe (Render kan ook een PostgreSQL database aanmaken)
-#    - Port: 3000
-
-# 3. Optie A: Automatisch via GitHub integratie
-#    Render detecteert pushes naar main en deployt automatisch
-
-# 4. Optie B: Deploy hook vanuit GitHub Actions
-#    Ga naar Render Dashboard → je service → Settings → Deploy Hook
-#    Kopieer de hook URL
-```
-
-```yaml
-# .github/workflows/deploy-production.yml
-name: Deploy to Production
-
-on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deploy environment'
-        default: 'production'
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger Render deploy
-        run: |
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
-
-      - name: Wait for deployment
-        run: sleep 30
-
-      - name: Smoke test
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://jouw-app.onrender.com/health)
-          if [ "$STATUS" != "200" ]; then
-            echo "Health check failed with status $STATUS"
-            exit 1
-          fi
-          echo "Deploy successful!"
-```
-
-```bash
-# 5. Voeg secret toe aan GitHub:
-#    Repository → Settings → Secrets → RENDER_DEPLOY_HOOK
-
-# 6. Test de hele flow:
-#    Push code → CI (lint + test) → Docker build → Deploy naar Render → Health check
-```
-
-## Deployment Checklist
-
-Before deploying to production:
-
-- [ ] All tests pass (green CI)
-- [ ] Code reviewed and approved
-- [ ] Security scan passed
-- [ ] Performance tests OK
-- [ ] Database migrations ready
-- [ ] Rollback plan documented
-- [ ] Team notified
-- [ ] Monitoring alerts configured
-- [ ] Backup taken
-- [ ] Maintenance window (if needed) scheduled
-
-## Dependency Management with Dependabot
-
-### Setup
-
-```yaml
-# .github/dependabot.yml
-version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-```
-
-### Auto-merge
-
-```yaml
-# .github/workflows/auto-merge-dependabot.yml
-on: pull_request
-
-jobs:
-  auto-merge:
-    if: dependabot.author
-    runs-on: ubuntu-latest
-    steps:
-      - name: Enable auto-merge
-        run: |
-          gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-## Monitoring Deployments
-
-```bash
-# Check deployment status
-kubectl rollout status deployment/dotnovi
-
-# View recent deployments
-kubectl rollout history deployment/dotnovi
-
-# Rollback to previous
-kubectl rollout undo deployment/dotnovi
-
-# View pod logs
-kubectl logs deployment/dotnovi
-```
-
-## Volgende Les
-
-In Les 6 gaan we:
-- Kubernetes introduceren
-- Container orchestration
-- Production deployments op K8s
-
-## Resources
-
-- [GitHub Deployments](https://docs.github.com/en/rest/deployments)
-- [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
-- [Deployment Strategies](https://www.openshift.com/blog/blue-green-deployment-on-openshift)
-- [Dependabot Documentation](https://docs.github.com/en/code-security/dependabot)
+**Onderzoeksvraag:** waar in de dotNOVI-configuratie zie je op welke poort de applicatie luistert, en waar configureer je deze als target port in Azure?
+
+> **Let op:** configureer `/health/ready` in deze ronde niet als verplichte HTTP-readinessprobe. PostgreSQL is nog niet beschikbaar.
+
+### A4 – Controleer de deployment
+
+Open de publieke HTTPS-URL van je Container App en controleer:
+
+1. `/version` is bereikbaar en retourneert HTTP 200.
+2. `/health/live` retourneert HTTP 200.
+3. In Azure is zichtbaar dat je Container App de image met tag `v1` gebruikt.
+
+Het is normaal dat `/health/ready` HTTP 503 retourneert. Ook de databaseafhankelijke routes werken nog niet volledig.
+
+**Tussenresultaat A:** dotNOVI draait als HTTP-service op Azure Container Apps en is via HTTPS bereikbaar.
+
+---
+
+## Praktijk B – Automatiseer je deployment (25 minuten)
+
+Je hebt de image handmatig gepubliceerd en gedeployed. Nu ga je die handelingen opnemen in je bestaande GitHub Actions-workflow.
+
+### B1 – Geef GitHub Actions pushrechten op ACR
+
+Je hebt al een managed identity `id-github-dotnovi` waarmee GitHub Actions via OIDC kan aanmelden bij Azure. Die identity heeft nog niet automatisch rechten om images naar je nieuwe registry te **pushen**.
+
+Geef `id-github-dotnovi` de rol **AcrPush** op **jouw ACR-resource** via **Access control (IAM)**. Gebruik geen onnodig brede rollen op je subscription.
+
+De Container Apps-pullidentity uit Praktijk A blijft apart bestaan.
+
+### B2 – Breid de CI-workflow uit
+
+Voeg aan je **bestaande CI-workflow** een deploymentjob toe die:
+
+1. Alleen start wanneer alle verplichte CI-controles succesvol zijn.
+2. Via OIDC authenticeert bij Azure.
+3. Een nieuwe Docker-image bouwt en onder tag **`v2`** publiceert naar ACR.
+4. Je bestaande Container App bijwerkt naar de image met tag **`v2`**.
+
+Je hoeft de CI-pipeline niet opnieuw te bouwen. Gebruik de YAML-fragmenten uit de les en de volgende handout:
+
+**[Technische hulp B – GitHub Actions uitbreiden met Azure-deployment](./LES5_HULP_GITHUB_ACTIONS.md)**
+
+**Hints:** `needs:`, `azure/login@v3`, `az acr login`, `docker build`, `docker push` en `az containerapp update --image`.
+
+Controleer dat de deploymentjob alleen op de juiste branch draait: dezelfde branch die je in de OIDC-voorbereiding hebt ingesteld.
+
+### B3 – Test de automatische deployment
+
+Voer een kleine, herkenbare wijziging door die zonder PostgreSQL te controleren is en die je bestaande tests niet onnodig breekt.
+
+Commit en push naar de afgesproken deploymentbranch. Controleer vervolgens:
+
+1. Start de workflow automatisch?
+2. Slagen de CI-controles **voordat** de deploymentjob start?
+3. Staat image `v2` in je ACR?
+4. Is Azure Container Apps bijgewerkt naar die image?
+5. Draait de gewijzigde applicatie en reageert `/health/live` met HTTP 200?
+
+In deze eerste ronde mag je de vaste tag `v2` gebruiken. Het gebruik van commit-SHA-tags en de koppeling met `APP_COMMIT_SHA` komen in ronde 2 aan bod.
+
+**Tussenresultaat B:** een geslaagde codewijziging leidt automatisch tot een nieuwe deployment naar Azure.
+
+---
+
+## Definition of Done – Ronde 1
+
+- [ ] DotNOVI-image `v1` is gepubliceerd naar ACR.
+- [ ] DotNOVI draait in Azure Container Apps en is bereikbaar via HTTPS.
+- [ ] `/version` en `/health/live` reageren met HTTP 200.
+- [ ] Container Apps kan de private image via een managed identity uit ACR ophalen.
+- [ ] De bestaande CI-controles blokkeren de deploymentjob als ze mislukken.
+- [ ] GitHub Actions meldt zich met OIDC aan bij Azure.
+- [ ] Een nieuwe image `v2` wordt automatisch gepubliceerd en gedeployed.
+- [ ] Je kunt in GitHub Actions en Azure aanwijzen welke nieuwe image wordt gebruikt.
+
+In deze ronde hoef je nog geen uitgebreide architectuurdocumentatie of zelfstandig foutonderzoek op te leveren.
+
+## Niet klaar binnen de lestijd?
+
+De 65 minuten zijn bedoeld om de keten samen met de docent voor het eerst werkend te krijgen. Als iets niet lukt, noteer **welke stap faalt** en **welke foutmelding je ziet**. Rond de werkende keten zo nodig na de les af voordat je aan ronde 2 begint.
+
+## Na de les – Vooruitblik op ronde 2
+
+In ronde 2 verwijder je de tijdelijke **Container App, Container Apps Environment en ACR**, en bouw je deze infrastructuur zelfstandig opnieuw op. Je mag de bestaande Resource Group, GitHub-identity, broncode en CI-workflow behouden.
+
+Dan gelden aanvullende eisen:
+
+- Herleidbare images met commit-SHA-tags in plaats van `v1`/`v2`.
+- Correcte koppeling tussen gepubliceerde image, `APP_COMMIT_SHA` en `/version`.
+- Beperkte toegangsrechten en veilige runtimeconfiguratie.
+- Aantonen dat falende kwaliteitscontroles deployment blokkeren.
+- Deploymentstatus, logs en een foutscenario onderzoeken.
+- De gekozen architectuur en configuratie reproduceerbaar documenteren.
+
+**Verwijder je oefenresources pas wanneer de werkende deployment uit ronde 1 is gecontroleerd.** Controleer ook aanvullende Azure-resources die kosten kunnen veroorzaken, zoals loggingresources.
+
+## Officiële documentatie
+
+- [Azure Container Registry](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-intro)
+- [Azure Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/overview)
+- [GitHub Actions met Azure Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/github-actions)
+- [Managed identity voor image pulls](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull)
