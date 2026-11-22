@@ -178,7 +178,9 @@ In deze ronde hoef je nog geen uitgebreide architectuurdocumentatie of zelfstand
 
 De 65 minuten zijn bedoeld om de keten samen met de docent voor het eerst werkend te krijgen. Als iets niet lukt, noteer **welke stap faalt** en **welke foutmelding je ziet**. Rond de werkende keten zo nodig na de les af voordat je aan ronde 2 begint.
 
-## Na de les – Vooruitblik op ronde 2
+## Na de les – Ronde 2: Zelfstandig opnieuw opbouwen
+
+**[Ga naar de volledige huiswerkopdracht: Ronde 2 – Bouw het zelfstandig en verantwoord](./LES5_RONDE2.md).**
 
 In ronde 2 verwijder je de tijdelijke **Container App, Container Apps Environment en ACR**, en bouw je deze infrastructuur zelfstandig opnieuw op. Je mag de bestaande Resource Group, GitHub-identity, broncode en CI-workflow behouden.
 
