@@ -1,15 +1,18 @@
+# Root files
 .env*
 .eslintrc.json
-.git
 .gitignore
-.idea
 eslint.config.js
 jest.config.js
+docker-compose.*
+*Dockerfile
 *.md
 
-Dockerfile*
-docker-compose.*
-
+# Folders
+.git
+.github/
+.idea
+coverage/
 db-data/
 node_modules/
 opdrachten/
