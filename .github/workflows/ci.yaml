@@ -1,12 +1,19 @@
 name: Continuous Integration
 
 on:
+  pull_request:
+    branches: &ci-branches # Using YAML anchors to avoid repetition: https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations#yaml-anchors-and-aliases
+      - "main"
+    paths: &ci-paths
+      - "src/**"
+      - "tests/**"
+      - "package*.json"
+      - ".github/workflows/ci.yaml"
   push:
     branches:
-      - "main"
-  pull_request:
-    branches:
-      - "main"
+      *ci-branches
+    paths:
+      *ci-paths
 
 jobs:
   test-and-lint:
@@ -50,7 +57,9 @@ jobs:
             name: coverage-report
             path: coverage/
 
-# It probably doesn't make sense to include this in the ci.yaml but I put this here for demonstration purposes
+  # Note to self: Perhaps a "build" job without publishing would be appropriate at this point to validate that the application can be containerized before allowing a merge.
+
+  # Note to self: It probably doesn't make sense to include this in the ci.yaml, but I put this here for demonstration purposes
   deploy:
     name: Deploy to production
     needs: [ test-and-lint ]
