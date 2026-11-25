@@ -149,13 +149,9 @@ Je Docker-image staat nu in Azure Container Registry, maar de applicatie draait 
 | Ingress | External, HTTP |
 | Target port | De poort waarop Express in de container luistert |
 
-2. Configureer de **system-assigned managed identity** van je Container App en vervang de eventuele quickstart-image via **Containers → Edit and deploy** door je eigen ACR-image `dotnovi:v1`. Kies **Managed identity → System assigned** als registry-authenticatie. De Azure Portal probeert de benodigde leesrechten (`AcrPull`) automatisch toe te kennen.
+2. Configureer de system-assigned managed identity van je Container App en vervang de eventuele quickstart-image via **Containers → Edit and deploy** door je eigen ACR-image `dotnovi:v1`. Kies **Managed identity → System assigned** als registry-authenticatie. De Azure Portal probeert de benodigde leesrechten (`AcrPull`) automatisch toe te kennen. Lukt het niet om de private image te selecteren of de identity te configureren? Gebruik dan [hulpdocument A](./LES5_HULP_ACR_PULL.md).
 
-   Lukt het niet om de private image te selecteren of de identity te configureren? Gebruik dan [**Technische hulp A – Een private ACR-image gebruiken in Azure Container Apps**](./LES5_HULP_ACR_PULL.md).
-
-3. Controleer of de nieuwe revisie de image kan ophalen en succesvol start.
-
-**Onderzoeksvraag:** waar in de dotNOVI-configuratie zie je op welke poort de applicatie luistert, en waar configureer je deze als target port in Azure?
+3. Controleer of de nieuwe revisie de image kan ophalen en succesvol start. Waar in de dotNOVI-configuratie zie je op welke poort de applicatie luistert, en waar configureer je deze als target port in Azure?
 
 > **Let op:** configureer `/health/ready` in deze ronde niet als verplichte HTTP-readinessprobe. PostgreSQL is nog niet beschikbaar.
 
@@ -179,7 +175,7 @@ Het is normaal dat `/health/ready` HTTP 503 retourneert. Ook de databaseafhankel
 
 Je hebt zojuist een GitHub Actions-workflow gemaakt die je handmatig kunt starten. Hiermee heb je een Docker-image gepubliceerd naar ACR. Vervolgens heb je de applicatie handmatig gedeployed via de Azure Portal. Nu ga je de build-, publicatie- en deploymentstappen _automatiseren_.
 
-Je hergebruikt je stappen uit de workflow van Praktijk A, maar integreert deze in jouw bestaande CI-workflow die je in de afgelopen paar lessen hebt gemaakt. Beide workflows gebruiken dezelfde branch waarvoor je OIDC-koppeling is ingericht. Het verschil is **hoe ze worden gestart**:
+Je hergebruikt je stappen uit de workflow van Praktijk A, maar integreert deze in jouw bestaande CI-workflow die je in de afgelopen paar lessen hebt gemaakt. Beide workflows gebruiken dezelfde branch waarvoor je OIDC-koppeling is ingericht. Het verschil is hoe ze worden gestart:
 
 - De workflow uit Praktijk A start je handmatig met `workflow_dispatch`.
 - Je uitgebreide CI-workflow uit Praktijk B start automatisch bij een `push`.
@@ -188,6 +184,8 @@ De gewenste volgorde in Praktijk B is: **Code pushen → CI-controles → Image 
 
 ### B.1 – Breid je CI-pipeline uit met imagepublicatie
 In de vorige les heb je een CI-workflow ingericht die automatisch start wanneer je code pusht. Je gaat deze bestaande workflow nu uitbreiden.
+
+Loop je vast bij het inrichten van je publish-job? In [hulpdocument B](./LES5_HULP_GITHUB_ACTIONS.md) vind je een gedeeltelijk YAML-voorbeeld, uitleg over de afhankelijkheden tussen jobs en hulp bij veelvoorkomende foutmeldingen. Gebruik dit document ook bij B.2 als het automatisch deployen niet lukt.
 
 1. Voeg aan je bestaande CI-workflow in `.github/workflows/` een nieuwe job met de naam `publish` toe.
 2. Neem in deze job de stappen over uit je handmatige workflow van Praktijk A.
@@ -204,8 +202,6 @@ Je `publish`-job bouwt en publiceert nu de Docker-image `dotnovi:v2`. Je gaat de
 3. Configureer deze stap zodat de Container App `ca-dotnovi-lab` in Resource Group `rg-dotnovi-lab` wordt bijgewerkt naar jouw ACR-image `dotnovi:v2`.
 
 > **Let op:** je gebruikt de **bestaande Azure-login** uit de `publish`-job. Je hoeft dus niet opnieuw te authenticeren. Je maakt ook geen nieuwe Container App aan: de applicatie die je in Praktijk A handmatig hebt gedeployed, wordt nu automatisch bijgewerkt.
-
-Gebruik indien nodig [**Technische hulp B – GitHub Actions uitbreiden met Azure-deployment**](./LES5_HULP_GITHUB_ACTIONS.md).
 
 ### B.3 – Test de automatische deployment
 Je CI/CD-pipeline is nu uitgebreid. Controleer of de volledige keten werkt:
