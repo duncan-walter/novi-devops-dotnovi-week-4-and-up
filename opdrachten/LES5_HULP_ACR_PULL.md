@@ -1,6 +1,6 @@
 # Technische hulp A – Private ACR-image gebruiken in Azure Container Apps
 
-> **Bij Praktijk A, opdracht A3.** Deze instructie hoort bij [LES5.md](./LES5.md). Ze gaat uit van een ACR met **RBAC Registry Permissions** (zonder ABAC).
+> **Bij Praktijk A, opdracht A.4.** Deze instructie hoort bij [LES5.md](./LES5.md). Ze gaat uit van een ACR met **RBAC Registry Permissions** (zonder ABAC).
 
 ## Waarom?
 
