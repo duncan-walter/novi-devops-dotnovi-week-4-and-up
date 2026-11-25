@@ -2,72 +2,53 @@
 
 ## Ronde 1 – Simpele deployment
 
-**Tijdens de les: 65 minuten praktijkwerk**  
-**Praktijk A:** 40 minuten · **Praktijk B:** 25 minuten
-
-In de vorige lessen heb je de **dotNOVI-applicatie** gecontaineriseerd en een CI-pipeline gemaakt met GitHub Actions. Nu ga je de applicatie deployen naar **Microsoft Azure** en ervoor zorgen dat nieuwe, succesvol gecontroleerde codewijzigingen automatisch worden uitgerold.
+In de vorige lessen heb je de dotNOVI-applicatie gecontaineriseerd en een CI-pipeline gemaakt met GitHub Actions. Nu ga je de applicatie deployen naar Microsoft Azure en ervoor zorgen dat nieuwe, succesvol gecontroleerde codewijzigingen automatisch worden uitgerold.
 
 Je voert deze oefening in twee stappen uit:
+1. **Praktijk A:** bouw en publiceer een Docker-image via GitHub Actions naar Azure Container Registry (ACR) en deploy deze daarna handmatig via de Azure Portal naar Azure Container Apps.
+2. **Praktijk B:** breid je bestaande CI-pipeline uit zodat nieuwe versies automatisch worden gebouwd, gepubliceerd en gedeployed.
 
-- **Praktijk A:** bouw en publiceer een Docker-image via GitHub Actions naar Azure Container Registry (ACR) en deploy deze daarna handmatig via de Azure Portal naar Azure Container Apps.
-- **Praktijk B:** breid je bestaande CI-pipeline uit zodat nieuwe versies automatisch worden gebouwd, gepubliceerd en gedeployed.
+Deze eerste ronde draait om het werkend krijgen van de volledige keten. Je mag de hulpdocumenten en ondersteuning van de docent gebruiken. In de tweede ronde (huiswerk) bouw je de infrastructuur opnieuw op, met strengere eisen en minder begeleiding.
 
-Deze eerste ronde draait om het **werkend krijgen van de volledige keten**. Je mag de hulpdocumenten en ondersteuning van de docent gebruiken. In **ronde 2 (huiswerk)** bouw je de infrastructuur opnieuw op, met strengere eisen en minder begeleiding.
-
-### Waarom bouwen we de image via GitHub Actions?
-
+### Image bouwen via via GitHub Actions
 In een professionele CI/CD-omgeving worden Docker-images doorgaans automatisch gebouwd en gepubliceerd vanuit een pipeline. Daarmee is het buildproces reproduceerbaar en niet afhankelijk van de ontwikkelcomputer van één persoon.
 
-Je kunt een image ook lokaal bouwen en handmatig publiceren met Docker en de Azure CLI. Dat is bijvoorbeeld bruikbaar voor ontwikkeling of troubleshooting, maar slaan we in deze opdracht bewust over.
-
-GitHub Actions bouwt en publiceert je image op een **GitHub-hosted runner**. Je hoeft daarvoor geen Azure CLI of containerengine lokaal te installeren. De runner voert de benodigde commando's wel uit.
-
-**In Praktijk A start je de publicatieworkflow handmatig en deploy je via de Azure Portal. In Praktijk B koppel je de imagepublicatie aan je bestaande CI-controles en automatiseer je ook de deployment.**
-
-Zo ervaar je eerst dat *publish* en *deploy* twee verschillende stappen zijn.
+Je kunt een image ook lokaal bouwen en handmatig publiceren met Docker en de Azure CLI. Dat is bijvoorbeeld bruikbaar voor ontwikkeling of troubleshooting, maar slaan we in deze opdracht bewust over. GitHub Actions bouwt en publiceert je image op een **GitHub-hosted runner**. Je hoeft daarvoor geen Azure CLI of containerengine lokaal te installeren. De runner voert de benodigde commando's wel uit.
 
 ## Wat heb je al voorbereid?
-
-Na les 4 heb je als voorbereiding:
-
-- Een actief **Azure for Students-account** en een werkende dotNOVI-repository.
-- Een Dockerfile en werkende GitHub Actions **CI-pipeline** voor dotNOVI.
+Als voorbereiding heb je gezorgd voor:
+- Een actief Azure for Students-account en een werkende dotNOVI-repository.
+- Een Dockerfile en werkende GitHub Actions CI-pipeline voor dotNOVI.
 - Een Azure Resource Group `rg-dotnovi-lab`.
 - Een user-assigned managed identity `id-github-dotnovi`, met een federated credential voor jouw GitHub-repository en deploymentbranch.
 - De benodigde Azure-rol voor het bijwerken van Container Apps in je Resource Group.
 - De GitHub Actions-secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` en `AZURE_SUBSCRIPTION_ID`.
-- Een **geslaagde OIDC-login-test** vanuit GitHub Actions.
+- Een geslaagde OIDC-login-test vanuit GitHub Actions.
 
-Als je voorbereiding niet werkt, meld dit aan de docent voordat je begint. Gebruik geen langdurige Azure-wachtwoorden als snelle vervanging.
+Werkt je OIDC-authenticatie niet? Vraag de docent om hulp. Gebruik geen alternatieve inlogmethode met opgeslagen wachtwoorden of client secrets om de OIDC-configuratie te omzeilen.
 
-> **Database:** in deze les richt je nog geen PostgreSQL-database in Azure in. dotNOVI kan als HTTP-service draaien zonder werkende databaseverbinding. Daarom is `/health/live` het controlepunt voor deze ronde; `/health/ready` kan terecht **HTTP 503** retourneren.
+> **Let op:** in deze les richt je nog geen PostgreSQL-database in Azure in. dotNOVI kan als HTTP-service draaien zonder werkende databaseverbinding. Daarom is `/health/live` het controlepunt voor deze ronde; `/health/ready` kan terecht `HTTP 503` retourneren.
 
----
-
-## Praktijk A – Eerste clouddeployment (40 minuten)
-
+## Praktijk A
 ### A.1 – Maak een Azure Container Registry aan
 
-Een registry slaat containerimages op zodat Azure Container Apps ze kan ophalen.
-
-Maak via de Azure Portal in je bestaande Resource Group een **Azure Container Registry (ACR)** aan:
+Een registry slaat containerimages op zodat Azure Container Apps ze kan ophalen. Maak via de Azure Portal in je bestaande Resource Group een **Azure Container Registry (ACR)** aan:
 
 | Instelling | Waarde |
 | --- | --- |
 | Resource Group | `rg-dotnovi-lab` |
-| Registry name | Een **wereldwijd unieke** naam |
+| Registry name | Een wereldwijd unieke naam |
 | Region | West Europe, indien beschikbaar |
 | SKU | Basic |
-| Role assignment permissions mode | **RBAC Registry Permissions** (zonder ABAC) |
+| Role assignment permissions mode | RBAC Registry Permissions (zonder ABAC) |
 | Admin user | Uitgeschakeld |
 
 Noteer de **Login server** van je registry zoals die in Azure staat weergegeven.
 
 ### A.2 – Geef GitHub Actions toegang tot ACR
-
 Je hebt vooraf een managed identity `id-github-dotnovi` gemaakt waarmee GitHub Actions via OIDC kan aanmelden bij Azure. Aanmelden betekent niet automatisch dat deze identiteit images naar je nieuwe registry mag publiceren.
 
-Geef de identity daarom **AcrPush**-rechten op **uitsluitend je ACR-resource**:
+Geef de identity daarom _AcrPush_-rechten op **uitsluitend je ACR-resource**:
 
 1. Open je Azure Container Registry in de Azure Portal.
 2. Ga naar **Access control (IAM) → Add → Add role assignment**.
@@ -78,46 +59,83 @@ Geef de identity daarom **AcrPush**-rechten op **uitsluitend je ACR-resource**:
 **Documentatie:** [Microsoft Learn – Azure Container Registry roles and permissions](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-rbac-built-in-roles-overview).
 
 ### A.3 – Bouw en publiceer je Docker-image via GitHub Actions
+Bouw op een GitHub-hosted runner een image van dotNOVI met je bestaande Dockerfile en publiceer deze naar je eigen ACR. Gebruik voor deze eerste versie de tag `v1`. Je hoeft hiervoor geen Docker of Azure CLI op je eigen computer uit te voeren. In plaats daarvan maak hiervoor een **aparte** GitHub Actions-workflow die je handmatig kunt starten.
 
-Bouw op een GitHub-hosted runner een image van dotNOVI met je bestaande Dockerfile en publiceer deze naar je eigen ACR. Gebruik voor deze eerste versie de tag **`v1`**.
+#### Stap 1 – Maak een handmatig startbare workflow
 
-Maak hiervoor een **aparte, handmatig startbare GitHub Actions-workflow**. Deze moet:
+Maak in `.github/workflows/` een nieuw workflowbestand aan. Zoek in de [GitHub-documentatie over het handmatig starten van workflows](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow) hoe je met `workflow_dispatch` een workflow handmatig uitvoerbaar maakt.
 
-1. De broncode ophalen.
-2. Via OIDC authenticeren bij Azure.
-3. Docker aanmelden bij je ACR.
-4. De Docker-image bouwen op de GitHub-runner.
-5. De image onder tag `v1` naar ACR pushen.
+#### Stap 2 – Haal de broncode op
 
-**Gerichte hints:** `workflow_dispatch`, `actions/checkout`, `azure/login@v3`, `az acr login`, `docker build` en `docker push`. De Azure CLI- en Docker-commando's worden **op de runner**, niet op je laptop, uitgevoerd.
+Configureer een job die draait op een GitHub-hosted Ubuntu-runner. Bekijk in de [documentatie van `actions/checkout`](https://github.com/actions/checkout#usage) hoe je de broncode van dotNOVI beschikbaar maakt op de runner, zodat de Dockerfile tijdens de build kan worden gebruikt.
 
-Je workflow moet op de standaardbranch van je repository aanwezig zijn om in GitHub Actions met **Run workflow** gestart te kunnen worden. Start hem op de branch die je in de federated credential hebt ingesteld.
+#### Stap 3 – Authenticeer bij Azure en ACR
+Tijdens de voorbereidingsopdracht heb je al een werkende OIDC-koppeling tussen GitHub Actions en Azure ingericht. Je kunt deze nu opnieuw gebruiken. Voeg de volgende permissies toe aan je job:
 
-**Documentatie:**
-
-- [GitHub Docs – Manually running a workflow](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
-- [Azure Login Action](https://github.com/Azure/login)
-- [Microsoft Learn – ACR-authenticatie](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-authentication)
-
-**Controle:** start de workflow via de **Actions**-tab, controleer de succesvolle run en zoek in de Azure Portal de repository en tag `v1` op.
-
-Een imageverwijzing heeft de vorm:
-
-```text
-<acr-login-server>/<repository>:v1
+```yaml
+permissions:
+  id-token: write
+  contents: read
 ```
 
-Gebruik de **exacte login server** uit de Azure Portal.
+Voeg vervolgens de Azure-loginstap toe aan je workflow:
 
-**Resultaat:** de Docker-image staat als `v1` in ACR, zonder lokaal een image te bouwen of Azure CLI te gebruiken.
+```yaml
+- name: Login to Azure
+  uses: azure/login@v3
+  with:
+    client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+```
+
+Zoals je weet, authenticeert GitHub Actions zich hiermee via de bestaande OIDC-koppeling bij Microsoft Azure. Je hoeft hiervoor dus geen nieuwe credentials aan te maken.
+
+Vervolgens moet ook Docker toegang krijgen tot jouw Azure Container Registry. Zoek in de [Microsoft-documentatie over ACR-authenticatie](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-get-started-docker-cli#log-in-to-a-registry) hoe je dit met de Azure CLI doet. Let op: de Azure CLI en Docker worden hierbij op de GitHub-hosted runner uitgevoerd, **niet** op je eigen computer.
+
+#### Stap 4 – Bouw de Docker-image
+Voeg een stap toe waarmee je op de GitHub-runner een Docker-image bouwt vanuit de bestaande Dockerfile van dotNOVI.
+
+Zoek in de [Docker-documentatie](https://docs.docker.com/reference/cli/docker/image/build/) over het bouwen van images hoe je een image bouwt en direct een naam en versie (_tag_) meegeeft.
+
+Om de image later naar Azure Container Registry te kunnen publiceren, moet de image de juiste naam krijgen. Deze bestaat uit drie onderdelen:
+
+```yaml
+<registryadres>/<imagenaam>:<tag>
+```
+
+Bijvoorbeeld: `acrdotnovimaarten.azurecr.io/dotnovi:v1`
+
+Hierbij is:
+* `acrdotnovimaarten.azurecr.io` het adres van jouw Azure Container Registry (Login server).
+* `dotnovi` de naam van de image (repository).
+* `v1` de versie van de image (_tag_).
+
+Je vindt de **Login server** op de overzichtspagina (Overview) van je Azure Container Registry in de Azure Portal. Gebruik voor deze opdracht `dotnovi` als repositorynaam en `v1` als tag.
+
+#### Stap 5 – Publiceer de image naar ACR
+
+Je hebt nu een Docker-image gebouwd op de GitHub-runner. Deze image is nog niet beschikbaar in Azure Container Registry. Voeg een stap toe aan je GitHub Actions-workflow waarmee je de image naar jouw ACR publiceert.
+
+Zoek in de [Docker-documentatie](https://docs.docker.com/reference/cli/docker/image/push/) over het publiceren van images hoe je met `docker push` een image naar een container registry verstuurt.
+
+Gebruik hierbij dezelfde **volledige imageverwijzing als bij het bouwen van de image in stap 4** (bijvoorbeeld `acrdotnovimaarten.azurecr.io/dotnovi:v1`). Wanneer de workflow succesvol is uitgevoerd, staat de image in jouw Azure Container Registry. Je kunt deze vervolgens gebruiken om een Azure Container App handmatig te deployen.
+
+#### Controleer je resultaat
+
+1. Commit en push je workflowbestand naar de branch waarvoor je OIDC-authenticatie hebt ingericht.
+2. Open de Actions-tab van je GitHub-repository en start de workflow via Run workflow.
+3. Controleer of alle stappen succesvol zijn afgerond.
+4. Open je Azure Container Registry in de Azure Portal. Ga naar Services → Repositories en controleer of de repository `dotnovi` aanwezig is.
+5. Open de repository en controleer of de tag `v1` beschikbaar is.
+
+> **Let op:** om een workflow handmatig vanuit GitHub Actions te kunnen starten, moet het workflowbestand op de standaardbranch van de repository aanwezig zijn. Selecteer vervolgens de branch die overeenkomt met je voorbereide OIDC-koppeling.
 
 ### A.4 – Deploy naar Azure Container Apps
 
-De image staat nu in ACR, maar draait nog niet in Azure. De deployment configureer je **handmatig in de Azure Portal**; de GitHub-workflow uit A.3 publiceert uitsluitend de image.
-
-Maak een **Container Apps Environment** aan en deploy je gepubliceerde image met een nieuwe **Azure Container App**.
-
-Gebruik de volgende uitgangspunten:
+De image staat nu in ACR, maar draait nog niet in Azure. De deployment configureer je **handmatig in de Azure Portal**.
+* Maak een **Container Apps Environment** aan en deploy je gepubliceerde image met een nieuwe **Azure Container App**.
+* Gebruik de volgende uitgangspunten:
 
 | Instelling | Waarde |
 | --- | --- |
