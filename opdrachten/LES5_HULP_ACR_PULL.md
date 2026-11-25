@@ -1,57 +1,52 @@
-# Technische hulp A – Private ACR-image gebruiken in Azure Container Apps
+# Technische hulp A – Een private ACR-image gebruiken in Azure Container Apps
 
-> **Bij Praktijk A, opdracht A.4.** Deze instructie hoort bij [LES5.md](./LES5.md). Ze gaat uit van een ACR met **RBAC Registry Permissions** (zonder ABAC).
+> **Bij Praktijk A, opdracht A.4** in [LES5.md](./LES5.md). Gebruik dit document als je hulp nodig hebt bij de private image, de managed identity of de image pull. De opdracht gebruikt een ACR met **RBAC Registry Permissions (zonder ABAC)**.
 
-## Waarom?
+## Wat ga je hier doen?
 
-Een image in Azure Container Registry (ACR) is niet automatisch toegankelijk voor Azure Container Apps. Je geeft de Container App een eigen **user-assigned managed identity** met alleen pullrechten. Dit is **niet** dezelfde identiteit als `id-github-dotnovi` waarmee GitHub Actions inlogt.
+Je image `dotnovi:v1` staat in je eigen private Azure Container Registry (ACR). Azure Container Apps moet deze image kunnen ophalen, maar de ACR-adminaccount blijft uitgeschakeld. Je configureert daarom een **system-assigned managed identity** en laat die identity de image lezen met `AcrPull`-rechten.
 
-## 1. Maak een managed identity aan
+Dit is **niet** de identiteit `id-github-dotnovi`: die gebruikt GitHub Actions om images te publiceren (`AcrPush`). Een aparte user-assigned pull-identity aanmaken is voor deze oefening niet nodig.
 
-1. Open de [Azure Portal](https://portal.azure.com) en zoek **Managed Identities**.
-2. Kies **Create** en selecteer je Azure for Students-subscription.
-3. Resource group: `rg-dotnovi-lab`.
-4. Naam: `id-acr-pull-dotnovi`; regio: **West Europe** (of dezelfde ondersteunde regio als je lab).
-5. Maak de identity aan.
+## 1. Maak eerst de Container App aan
 
-## 2. Geef de identity toegang tot de registry
+1. Open de [Azure Portal](https://portal.azure.com) en maak een Container App met de naam `ca-dotnovi-lab` in Resource Group `rg-dotnovi-lab`.
+2. Selecteer je Container Apps Environment `cae-dotnovi-lab` (maak die aan als deze nog niet bestaat).
+3. Kies bij de containerimage voorlopig de **publieke quickstart-image** (`Simple hello world container`). Zo kan de Container App worden aangemaakt voordat de private registry-authenticatie is ingesteld.
+4. Gebruik de overige instellingen uit [opdracht A.4](./LES5.md#a4--deploy-naar-azure-container-apps), waaronder externe ingress en de juiste target port zodra je dotNOVI gebruikt.
 
-1. Open je eigen **Azure Container Registry** in de Portal.
-2. Kies **Access control (IAM) → Add → Add role assignment**.
-3. Selecteer **AcrPull** en vervolgens als lidtype **Managed identity**.
-4. Selecteer `id-acr-pull-dotnovi` en voltooi de roltoewijzing.
+## 2. Vervang de quickstart-image door dotNOVI
 
-`AcrPull` staat het ophalen van images toe, niet het publiceren ervan. Wijs de rol toe op **de registry zelf**, niet op je hele subscription.
+1. Open `ca-dotnovi-lab` in de Azure Portal en ga naar **Containers → Edit and deploy**.
+2. Open de containerconfiguratie en kies als **Image source**: **Azure Container Registry**.
+3. Selecteer je eigen registry. Gebruik repository `dotnovi` en tag `v1`.
+4. Kies bij **Authentication type** voor **Managed identity** en bij **Managed identity** voor **System assigned**.
+5. Sla de configuratie op en maak de nieuwe revisie aan.
 
-> Bij een registry met **RBAC Registry + ABAC Repository Permissions** is `AcrPull` niet de juiste rol. Gebruik in dat geval de passende repositoryreader-rol. Voor ronde 1 gebruik je de in A1 voorgeschreven **RBAC Registry Permissions**.
+De system-assigned identity hoort bij deze Container App. De Portal probeert bij het aanmaken van de revisie automatisch de benodigde rol `AcrPull` op jouw ACR toe te kennen. De precieze Portal-benamingen kunnen per versie iets verschillen.
 
-## 3. Koppel de identity aan je Container App
+## 3. Controleer de rechten als de image niet wordt opgehaald
 
-1. Als je nog geen Container App hebt, maak er eerst één in `cae-dotnovi-lab` met een **tijdelijke publieke image**; configureer de overige basisinstellingen zoals in Praktijk A.
-2. Open de Container App en ga naar **Identity → User assigned → Add**.
-3. Selecteer `id-acr-pull-dotnovi` en sla de wijziging op.
+1. Open je Azure Container Registry en ga naar **Access control (IAM) → Role assignments**.
+2. Controleer of de **system-assigned managed identity van `ca-dotnovi-lab`** de rol `AcrPull` op **de registry** heeft.
+3. Ontbreekt de rol? Kies **Add → Add role assignment**, selecteer `AcrPull` en wijs de rol toe aan de managed identity van `ca-dotnovi-lab`. Hiervoor moet jouw Azure-account bevoegd zijn om rollen toe te kennen.
+4. Controleer ook bij de Container App onder **Identity → System assigned** of de identity actief is. Nieuwe roltoewijzingen kunnen enige tijd nodig hebben om door te werken.
 
-## 4. Gebruik de private ACR-image
+Gebruik niet `id-github-dotnovi` voor deze pullrechten: daarmee zou je de twee verantwoordelijkheden onnodig combineren.
 
-1. Open de configuratie van de container (via **Containers** of **Revisions and replicas → Create new revision**, afhankelijk van de Portal-versie).
-2. Selecteer je **Azure Container Registry** en de gepubliceerde dotNOVI-image met tag `v1`.
-3. Kies **Managed identity** voor registry-authenticatie en selecteer `id-acr-pull-dotnovi`.
-4. Sla de configuratie op, maak zo nodig een nieuwe revisie en controleer dat deze start.
+## 4. Controleer de revisie
 
-> Sommige Portal-schermen bieden de koppeling met de managed identity al tijdens het aanmaken van een Container App aan. Gebruik dan dezelfde identity en rechten; de volgorde van de schermen kan afwijken.
+Open bij je Container App **Revisions and replicas** (of **Revision management**) en controleer of de revisie met `dotnovi:v1` start. Bekijk bij problemen de **system logs**.
 
-## 5. Controleer de image pull
+| Symptoom | Wat controleer je? |
+| --- | --- |
+| Image kan niet worden opgehaald | Exacte **Login server**, repository `dotnovi` en tag `v1`; `AcrPull` voor de juiste identity |
+| Registry wordt geweigerd ondanks `AcrPull` | Of ACR **ARM audience tokens** toestaat voor managed-identity-authenticatie; zie de Microsoft-documentatie hieronder |
+| Nieuwe revisie start niet | Containerlogs, containerpoort en ingestelde ingress/target port |
+| Je ziet nog de voorbeeldapp | Of de nieuwe revisie actief is en verkeer ontvangt |
 
-Controleer bij **Revisions and replicas** of je nieuwe revisie start en of de juiste image met tag `v1` is geselecteerd. Bekijk bij een fout de **system logs**.
+> **Let op:** je hoeft voor deze opdracht geen Azure CLI of Docker op je eigen computer te installeren.
 
-Controleer bij een fout achtereenvolgens:
+**Resultaat:** je Container App kan de private dotNOVI-image met tag `v1` ophalen zonder registrywachtwoorden op te slaan.
 
-- Kloppen de exacte ACR-loginserver, repository en tag?
-- Is de managed identity aan de Container App gekoppeld?
-- Heeft diezelfde identity `AcrPull` op **de juiste registry**?
-- Staat in ACR onder **Settings → Properties** het gebruik van **ARM audience tokens** voor authenticatie toe? Dit kan nodig zijn voor managed-identity image pulls.
-- Heeft Azure voldoende tijd gehad om een nieuwe roltoewijzing te verwerken?
-
-**Resultaat:** de Container App haalt de private image uit ACR op zonder dat je een registrywachtwoord opslaat.
-
-**Documentatie:** [Microsoft Learn – Managed identity image pull](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull).
+Raadpleeg voor Portal-stappen en aanvullende problemen de [Microsoft-documentatie over private ACR-images en managed identities](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull).

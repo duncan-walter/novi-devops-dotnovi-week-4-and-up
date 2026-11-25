@@ -1,31 +1,21 @@
-# Technische hulp B – GitHub Actions uitbreiden met Azure-deployment
+# Technische hulp B – GitHub Actions: publiceren en deployen
 
-> **Bij Praktijk B, opdracht B.2.** Deze instructie hoort bij [LES5.md](./LES5.md). Je hebt de OIDC-voorbereidingsopdracht na les 4 voltooid en een werkende dotNOVI-deployment uit Praktijk A.
+> **Bij Praktijk B, opdrachten B.1 en B.2** in [LES5.md](./LES5.md). Gebruik dit document als je hulp nodig hebt bij de structuur van de nieuwe `publish`-job of bij foutmeldingen. Het is geen tweede opdracht.
 
-## Wat ga je doen?
+## Wat vind je hier?
 
-In Praktijk A heb je al een **handmatig gestarte GitHub Actions-workflow** gemaakt die image `v1` naar Azure Container Registry (ACR) publiceert. Breid nu je **bestaande CI-workflow** uit en **hergebruik de werkende publicatiestappen**. Na succesvolle tests en linting publiceert GitHub Actions image `v2` en werkt de bestaande Container App bij.
+In Praktijk A werkte een **handmatig gestarte workflow** voor image `v1`. In Praktijk B voeg je aan je **bestaande CI-workflow uit les 4** één job met de naam `publish` toe. Deze job gebruikt de werkende stappen uit Praktijk A, bouwt en pusht `dotnovi:v2` en werkt daarna **de bestaande Container App** bij.
 
-Je gebruikt de eerder aangemaakte identity `id-github-dotnovi`, niet de identity `id-acr-pull-dotnovi`. Deze laatste is alleen bedoeld om vanuit Container Apps images op te halen.
+De handmatige workflow uit Praktijk A mag blijven bestaan. Maak **geen derde workflow** en ook geen aparte `deploy`-job voor deze oefening.
 
-## 1. Hergebruik je publicatieworkflow uit Praktijk A
+## 1. Startpunt voor je `publish`-job
 
-Je hebt `id-github-dotnovi` in Praktijk **A.2** al `AcrPush` gegeven op jouw ACR. **Ken deze rechten niet opnieuw toe.**
-
-Neem de werkende authenticatie-, build- en publishstappen uit de handmatig gestarte workflow van **A.3** over in je bestaande CI-workflow. Publiceer in deze ronde tag **`v2`** in plaats van `v1`.
-
-Zorg dat de publicatiejob afhankelijk is van **alle verplichte test- en lintcontroles**. De aparte handmatig te starten workflow kan blijven bestaan, maar gebruik voor de automatische deployment je bestaande CI-workflow.
-
-De OIDC-identiteit moet voldoende rechten hebben om ook de bestaande Container App bij te werken. Die rechten heb je na les 4 voorbereid.
-
-## 2. Vul de deploymentjob in
-
-Onderstaande YAML is een **gedeeltelijk voorbeeld** van een job die publiceren en deployen combineert. Voeg de relevante stappen toe onder `jobs:` in je bestaande CI-workflow of gebruik afzonderlijke afhankelijke publish- en deployjobs. Maak niet opnieuw een CI-pipeline vanaf nul.
+Onderstaand fragment plaats je onder `jobs:` van je **bestaande CI-workflow**. Het is bewust **onvolledig**: je vult de TODO-stappen in met de werkende commando's uit A.3 en de deploymentopdracht uit B.2.
 
 ```yaml
-  deploy:
-    needs: [test, lint]       # Pas aan naar de echte namen van jouw CI-jobs
-    if: github.ref == 'refs/heads/main'
+  publish:
+    needs: [test, lint]   # Vervang door de echte namen van AL je verplichte CI-jobs
+    if: github.ref == 'refs/heads/main'  # Pas aan als je OIDC-branch anders heet
     runs-on: ubuntu-latest
 
     permissions:
@@ -43,58 +33,38 @@ Onderstaande YAML is een **gedeeltelijk voorbeeld** van een job die publiceren e
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # TODO 1: Hergebruik de ACR-login uit Praktijk A.3.
-      # TODO 2: Hergebruik de Docker-build uit Praktijk A.3 (nu met tag v2).
-      # TODO 3: Hergebruik de ACR-push uit Praktijk A.3 (nu met tag v2).
-      # TODO 4: Werk de bestaande Container App bij naar de gepubliceerde image v2.
+      # TODO 1: Log Docker in bij ACR (zoals in A.3).
+      # TODO 2: Bouw de volledige ACR-imageverwijzing met tag v2.
+      # TODO 3: Publiceer dezelfde image naar ACR met docker push.
+      # TODO 4: Werk ca-dotnovi-lab bij naar die image met az containerapp update --image.
 ```
 
-- Pas `needs` aan je bestaande workflow aan. Staan test en lint in dezelfde job, gebruik dan de naam van die ene job. Publicatie mag niet beginnen vóórdat deze controles slagen.
-- De branch in de `if`-voorwaarde moet overeenkomen met de branch in je **federated credential**. Gebruik een andere naam als je geen `main` hebt.
-- De GitHub Actions-secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` en `AZURE_SUBSCRIPTION_ID` heb je al tijdens de voorbereiding ingesteld.
-- Plaats **geen wachtwoorden, tokens of registry admin-credentials** in de YAML.
+### Waar moet je op letten?
 
-## 3. Maak publiceren én deployen automatisch
+- **`needs:` verwijst naar job-ID's, niet naar de getoonde namen van stappen.** Heb je één CI-job die alle tests en linting uitvoert? Verwijs dan alleen naar die job. Alle verplichte CI-jobs moeten succesvol zijn vóór `publish`.
+- **Elke job draait op een eigen runner.** Daarom heeft `publish` opnieuw `actions/checkout`, OIDC-permissies en `azure/login@v3` nodig. Binnen `publish` hoef je na de ACR-push **niet nog een keer** bij Azure in te loggen om te deployen.
+- **Branchbeveiliging:** de `if`-voorwaarde moet overeenkomen met de branch in je federated credential. De bestaande CI-workflow start al automatisch bij `push`.
+- **Azure-rechten:** `id-github-dotnovi` heeft al `AcrPush` (A.2) en de rechten voor Container Apps uit je voorbereiding. Ken die niet opnieuw toe. De **system-assigned identity van de Container App** is uitsluitend voor het ophalen van de private image (`AcrPull`).
+- **Eén imageverwijzing:** gebruik voor `docker build`, `docker push` en `az containerapp update --image` exact dezelfde volledige verwijzing: `<login-server>/dotnovi:v2`. Neem de echte login server over uit de Azure Portal.
+- **Geen credentials in YAML:** bewaar geen registrywachtwoorden, admin-inloggegevens of client secrets in je workflow.
 
-| Doel | Aanwijzing |
-| --- | --- |
-| Docker aanmelden bij ACR | Hergebruik de werkende `az acr login`-stap uit Praktijk A.3. |
-| Image bouwen | Hergebruik je `docker build`-stap en geef de image tag `v2`. |
-| Image publiceren | Hergebruik `docker push` uit Praktijk A.3. |
-| Container App bijwerken | Zoek `az containerapp update --image`; geef de app-naam, Resource Group en de volledige image-URL mee. |
+Gebruik bij het bijwerken van de bestaande Container App de [Microsoft-documentatie voor `az containerapp update`](https://learn.microsoft.com/en-us/cli/azure/containerapp#az-containerapp-update). De commando's worden op de **GitHub-hosted runner** uitgevoerd, niet op jouw laptop.
 
-De image heeft de vorm:
+## 2. Als het niet werkt
 
-```text
-<login-server>/<repository>:v2
-```
-
-Gebruik de **werkelijke login server** uit de Azure Portal; vul die niet op basis van een veronderstelde registrynaam in. Zorg dat de workflow `v2` gebruikt bij **zowel push als deploy**.
-
-Voor deze eerste begeleide ronde mag je `v2` gebruiken. In ronde 2 wordt de tag afgeleid van de Git-commit-SHA.
-
-## 4. Test de automatische deployment
-
-1. Breng een kleine, herkenbare wijziging aan die **zonder database** zichtbaar of controleerbaar is, zonder bestaande tests onnodig te breken.
-2. Commit en push naar de vertrouwde deploymentbranch.
-3. Controleer in **GitHub → Actions** of de bestaande CI-controles slagen **vóór** de deploymentjob.
-4. Controleer in ACR of de image `v2` is gepubliceerd.
-5. Controleer in **Azure Container Apps → Revisions and replicas** welke image de nieuwe revisie gebruikt.
-6. Open de HTTPS-URL en controleer `/health/live` en de zichtbare wijziging.
-
-> Het endpoint `/version` kan in deze ronde nog `commit: "unknown"` tonen. De commit-SHA wordt pas in ronde 2 expliciet gekoppeld aan de image en runtimeconfiguratie.
-
-## Als het niet werkt
+Gebruik de controlepunten uit [B.3 in de hoofdopdracht](./LES5.md#b3--test-de-automatische-deployment) voor de eindcontrole. Deze tabel helpt als een stap faalt:
 
 | Symptoom | Controle |
 | --- | --- |
-| Deployjob wordt overgeslagen | `needs:`, jobnamen, branchvoorwaarde en voorafgaande CI-resultaten |
-| Azure-login mislukt | Federated credential: exacte repository, branch, tenant en client ID |
-| `docker push` is geweigerd | `AcrPush` op de juiste registry; kan roltoewijzing nog niet zijn doorgevoerd? |
-| `az containerapp update` wordt geweigerd | Rechten op de Container App/resource group, naam en subscription |
-| Revisie start niet | Juiste image-tag, ACR-pullrechten en de containerpoort/ingress |
-| Workflow groen, oude versie zichtbaar | Geconfigureerde image/revisie en daadwerkelijke applicatieresponse |
+| `publish` start niet of wordt overgeslagen | `needs:`, echte CI-job-ID's, status van de tests en branchvoorwaarde |
+| Azure-login mislukt | `id-token: write`, federated credential (repo en branch), client-, tenant- en subscription-ID |
+| `docker push` wordt geweigerd | ACR-login en `AcrPush` voor `id-github-dotnovi` op de juiste registry |
+| `az containerapp update` wordt geweigerd | `ca-dotnovi-lab`, `rg-dotnovi-lab`, subscription en Azure RBAC-rechten |
+| Nieuwe revisie haalt de image niet op | System-assigned identity van de Container App, `AcrPull`, juiste login server en tag `v2` |
+| Workflow slaagt maar oude versie blijft zichtbaar | Actieve revisie, verkeersverdeling, gebruikte image en zichtbare wijziging |
 
-**Resultaat:** een geslaagde codewijziging leidt automatisch tot het publiceren van image `v2` en het bijwerken van Azure Container Apps.
+> **Let op:** `/version` kan in ronde 1 nog `commit: "unknown"` tonen. De koppeling aan de commit-SHA volgt in ronde 2.
 
-**Documentatie:** [Azure Login](https://github.com/Azure/login), [ACR-authenticatie](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-authentication), [GitHub Actions met Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/github-actions), [Container Apps CLI](https://learn.microsoft.com/en-us/cli/azure/containerapp).
+**Resultaat:** je hebt één `publish`-job die alleen na succesvolle CI-controles de image publiceert én de bestaande Container App bijwerkt. De volledige functionele test voer je uit in B.3.
+
+Voor meer achtergrond kun je de [Azure Login-documentatie](https://github.com/Azure/login) en de [Microsoft-documentatie over GitHub Actions met Azure Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/github-actions) raadplegen.
