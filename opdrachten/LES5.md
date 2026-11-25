@@ -149,7 +149,7 @@ Je Docker-image staat nu in Azure Container Registry, maar de applicatie draait 
 | Ingress | External, HTTP |
 | Target port | De poort waarop Express in de container luistert |
 
-2. Configureer de system-assigned managed identity van je Container App en vervang de eventuele quickstart-image via **Containers → Edit and deploy** door je eigen ACR-image `dotnovi:v1`. Kies **Managed identity → System assigned** als registry-authenticatie. De Azure Portal probeert de benodigde leesrechten (`AcrPull`) automatisch toe te kennen. Lukt het niet om de private image te selecteren of de identity te configureren? Gebruik dan [hulpdocument A](./LES5_HULP_ACR_PULL.md).
+2. Configureer de system-assigned managed identity van je Container App en vervang de eventuele quickstart-image via **Containers → Edit and deploy** door je eigen ACR-image `dotnovi:v1`. Kies **Managed identity → System assigned** als registry-authenticatie. De Azure Portal probeert de benodigde leesrechten (`AcrPull`) automatisch toe te kennen. Lukt het niet om de private image te selecteren of de identity te configureren? Gebruik dan [hulpdocument A](./les5_hulp_acr_pull.md).
 
 3. Controleer of de nieuwe revisie de image kan ophalen en succesvol start. Waar in de dotNOVI-configuratie zie je op welke poort de applicatie luistert, en waar configureer je deze als target port in Azure?
 
@@ -185,7 +185,7 @@ De gewenste volgorde in Praktijk B is: **Code pushen → CI-controles → Image 
 ### B.1 – Breid je CI-pipeline uit met imagepublicatie
 In de vorige les heb je een CI-workflow ingericht die automatisch start wanneer je code pusht. Je gaat deze bestaande workflow nu uitbreiden.
 
-Loop je vast bij het inrichten van je publish-job? In [hulpdocument B](./LES5_HULP_GITHUB_ACTIONS.md) vind je een gedeeltelijk YAML-voorbeeld, uitleg over de afhankelijkheden tussen jobs en hulp bij veelvoorkomende foutmeldingen. Gebruik dit document ook bij B.2 als het automatisch deployen niet lukt.
+Loop je vast bij het inrichten van je publish-job? In [hulpdocument B](./les5_hulp_github_actions.md) vind je een gedeeltelijk YAML-voorbeeld, uitleg over de afhankelijkheden tussen jobs en hulp bij veelvoorkomende foutmeldingen. Gebruik dit document ook bij B.2 als het automatisch deployen niet lukt.
 
 1. Voeg aan je bestaande CI-workflow in `.github/workflows/` een nieuwe job met de naam `publish` toe.
 2. Neem in deze job de stappen over uit je handmatige workflow van Praktijk A.
