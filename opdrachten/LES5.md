@@ -132,33 +132,32 @@ Gebruik hierbij dezelfde **volledige imageverwijzing als bij het bouwen van de i
 > **Let op:** om een workflow handmatig vanuit GitHub Actions te kunnen starten, moet het workflowbestand op de standaardbranch van de repository aanwezig zijn. Selecteer vervolgens de branch die overeenkomt met je voorbereide OIDC-koppeling.
 
 ### A.4 – Deploy naar Azure Container Apps
+Je Docker-image staat nu in Azure Container Registry, maar de applicatie draait nog niet in Azure. Je gaat deze image handmatig deployen via de Azure Portal.
 
-De image staat nu in ACR, maar draait nog niet in Azure. De deployment configureer je **handmatig in de Azure Portal**.
-* Maak een **Container Apps Environment** aan en deploy je gepubliceerde image met een nieuwe **Azure Container App**.
-* Gebruik de volgende uitgangspunten:
+1. Maak een **Container Apps Environment** en een **Azure Container App** aan met de volgende instellingen:
 
 | Instelling | Waarde |
 | --- | --- |
 | Resource Group | `rg-dotnovi-lab` |
 | Container Apps Environment | `cae-dotnovi-lab` |
 | Container App | `ca-dotnovi-lab` |
-| Image | Jouw ACR-image met tag `v1` |
+| Image | Jouw ACR-image `dotnovi:v1` |
 | Hosting | Consumption |
 | Resources | Kleine CPU- en geheugenconfiguratie |
 | Minimum replicas | 0 |
 | Maximum replicas | 1 |
-| Ingress | **External**, HTTP |
+| Ingress | External, HTTP |
 | Target port | De poort waarop Express in de container luistert |
 
-Voor een **private ACR-image** heeft Container Apps leesrechten nodig. Gebruik hiervoor de aanvullende instructie:
+2. Configureer bij het selecteren van de image **Managed Identity** als authenticatiemethode voor je Azure Container Registry. Gebruik hiervoor een *system-assigned managed identity*. Azure probeert automatisch de benodigde leesrechten (`AcrPull`) toe te kennen. Bekijk de [Microsoft-documentatie over het gebruik van managed identities voor private containerimages](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull) wanneer je hierbij ondersteuning nodig hebt.
 
-**[Technische hulp A – Een private ACR-image gebruiken in Azure Container Apps](./LES5_HULP_ACR_PULL.md)**
-
-Hierin configureer je een afzonderlijke managed identity met de benodigde pullrechten. Dat is een andere identiteit dan de identity waarmee GitHub Actions in Praktijk A de image naar ACR publiceert.
+3. Controleer of de Container App succesvol is aangemaakt en de image kan ophalen.
 
 **Onderzoeksvraag:** waar in de dotNOVI-configuratie zie je op welke poort de applicatie luistert, en waar configureer je deze als target port in Azure?
 
 > **Let op:** configureer `/health/ready` in deze ronde niet als verplichte HTTP-readinessprobe. PostgreSQL is nog niet beschikbaar.
+
+**Heb je problemen met `AcrPull`-rechten?** Controleer bij je Azure Container Registry onder **Access control (IAM) → Role assignments** of de managed identity van je Container App de rol **AcrPull** heeft. Ontbreekt deze rol, dan kun je die daar zelf toekennen, mits je voldoende rechten hebt. Lukt dat niet? Vraag de docent om hulp.
 
 ### A.5 – Controleer de deployment
 
@@ -170,99 +169,53 @@ Open de publieke HTTPS-URL van je Container App en controleer:
 
 Het is normaal dat `/health/ready` HTTP 503 retourneert. Ook de databaseafhankelijke routes werken nog niet volledig.
 
-**Tussenresultaat A:** dotNOVI draait als HTTP-service op Azure Container Apps en is via HTTPS bereikbaar. Je hebt ervaren dat **een image publiceren naar ACR niet hetzelfde is als een applicatie deployen naar Container Apps**.
+**Tussenresultaat A:** dotNOVI draait als HTTP-service op Azure Container Apps en is via HTTPS bereikbaar. Je hebt ervaren dat een image publiceren naar ACR niet hetzelfde is als een applicatie deployen naar Container Apps.
 
 ---
 
 ## Praktijk B – Automatiseer je deployment (25 minuten)
 
-In Praktijk A heb je GitHub Actions **handmatig gestart** om image `v1` te publiceren en daarna de image **via de Portal gedeployed**. Nu breng je imagepublicatie en deployment samen in je bestaande CI-pipeline.
+Je hebt zojuist een GitHub Actions-workflow gemaakt die je handmatig kunt starten. Hiermee heb je een Docker-image gepubliceerd naar ACR. Vervolgens heb je de applicatie handmatig gedeployed via de Azure Portal. Nu ga je de build-, publicatie- en deploymentstappen _automatiseren_.
 
-### B.1 – Integreer imagepublicatie in je CI-pipeline
+Je hergebruikt je stappen uit de workflow van Praktijk A, maar integreert deze in jouw bestaande CI-workflow die je in de afgelopen paar lessen hebt gemaakt. Beide workflows gebruiken dezelfde branch waarvoor je OIDC-koppeling is ingericht. Het verschil is **hoe ze worden gestart**:
 
-Gebruik de relevante stappen uit de handmatig gestarte workflow van Praktijk A om je **bestaande CI-workflow** uit te breiden.
+- De workflow uit Praktijk A start je handmatig met `workflow_dispatch`.
+- Je uitgebreide CI-workflow uit Praktijk B start automatisch bij een `push`.
 
-Zorg ervoor dat:
+De gewenste volgorde in Praktijk B is: **Code pushen → CI-controles → Image bouwen en publiceren → Deployen naar Azure**
 
-1. De bestaande tests en kwaliteitscontroles blijven draaien.
-2. Een image pas wordt gebouwd en gepubliceerd **nadat alle verplichte CI-controles zijn geslaagd**.
-3. De image naar je eigen ACR wordt gepubliceerd met tag **`v2`**.
+### B.1 – Breid je CI-pipeline uit met imagepublicatie
+In de vorige les heb je een CI-workflow ingericht die automatisch start wanneer je code pusht. Je gaat deze bestaande workflow nu uitbreiden.
 
-Je hoeft de CI-pipeline niet opnieuw te bouwen. Gebruik `needs:` om afhankelijkheden tussen jobs te configureren. Let op: de `AcrPush`-rechten heb je **al in Praktijk A** ingesteld.
+1. Voeg aan je bestaande CI-workflow in `.github/workflows/` een nieuwe job met de naam `publish` toe.
+2. Neem in deze job de stappen over uit je handmatige workflow van Praktijk A.
+3. Zorg ervoor dat de `publish`-job alleen wordt uitgevoerd wanneer alle verplichte tests en kwaliteitscontroles succesvol zijn afgerond. Bekijk in de [GitHub-documentatie over jobs](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-jobs) hoe je met `needs:` deze afhankelijkheid instelt.
+4. Publiceer de nieuwe image naar dezelfde Azure Container Registry, met repositorynaam `dotnovi` en tag **`v2`**.
 
-### B.2 – Automatiseer de deployment naar Azure Container Apps
+> **Let op:** je gebruikt dezelfde OIDC-koppeling en `AcrPush`-rechten als in Praktijk A. Je hoeft deze niet opnieuw in Azure in te stellen. De nieuwe `publish`-job heeft **wel** opnieuw `actions/checkout`, de OIDC-permissies en de Azure-loginstap nodig, omdat elke job op een eigen runner wordt uitgevoerd.
 
-Breid de workflow uit zodat na succesvolle imagepublicatie ook de **bestaande Container App** wordt bijgewerkt.
+### B.2 – Voeg automatische deployment toe
+Je `publish`-job bouwt en publiceert nu de Docker-image `dotnovi:v2`. Je gaat deze job uitbreiden zodat de nieuwe image ook automatisch wordt gedeployed.
 
-De deployment moet:
+1. Voeg aan **dezelfde** `publish`-job, direct na de stap waarin je de image naar ACR pusht, een nieuwe deploymentstap toe.
+2. Zoek in de [Microsoft-documentatie over Azure Container Apps](https://learn.microsoft.com/en-us/cli/azure/containerapp#az-containerapp-update) hoe je met `az containerapp update --image` de image van een bestaande Container App bijwerkt.
+3. Configureer deze stap zodat de Container App `ca-dotnovi-lab` in Resource Group `rg-dotnovi-lab` wordt bijgewerkt naar jouw ACR-image `dotnovi:v2`.
 
-1. Via OIDC authenticeren bij Azure.
-2. De Container App `ca-dotnovi-lab` bijwerken.
-3. De gepubliceerde image met tag `v2` gebruiken.
-4. Alleen plaatsvinden nadat de verplichte CI-controles en imagepublicatie zijn geslaagd.
-5. Alleen draaien vanaf de branch waarvoor je de OIDC-koppeling hebt ingericht.
+> **Let op:** je gebruikt de **bestaande Azure-login** uit de `publish`-job. Je hoeft dus niet opnieuw te authenticeren. Je maakt ook geen nieuwe Container App aan: de applicatie die je in Praktijk A handmatig hebt gedeployed, wordt nu automatisch bijgewerkt.
 
-Gebruik hiervoor **[Technische hulp B – GitHub Actions uitbreiden met Azure-deployment](./LES5_HULP_GITHUB_ACTIONS.md)**.
-
-**Hints:** `needs:`, `azure/login@v3` en `az containerapp update --image`. De commando's draaien op de GitHub-hosted runner, niet op je laptop.
+Gebruik indien nodig [**Technische hulp B – GitHub Actions uitbreiden met Azure-deployment**](./LES5_HULP_GITHUB_ACTIONS.md).
 
 ### B.3 – Test de automatische deployment
-
-Breng een kleine, herkenbare wijziging aan die ook **zonder PostgreSQL** zichtbaar is en je bestaande tests niet onnodig breekt. Commit en push naar de afgesproken deploymentbranch.
+Je CI/CD-pipeline is nu uitgebreid. Controleer of de volledige keten werkt:
+1. Breng een kleine, herkenbare wijziging aan in dotNOVI, die zichtbaar is zonder de koppeling met de PostgreSQL-database.
+2. Commit en push deze wijziging naar de branch die je tijdens de voorbereiding hebt gebruikt.
+3. Open de **Actions**-tab in GitHub en volg de uitvoering van je CI/CD-workflow.
 
 Controleer:
+- [ ] De bestaande CI-controles zijn succesvol afgerond voordat de `publish`-job startte.
+- [ ] De `publish`-job heeft de image `dotnovi:v2` naar ACR gepubliceerd.
+- [ ] De deploymentstap is succesvol afgerond.
+- [ ] Je bestaande Container App gebruikt de image `dotnovi:v2`.
+- [ ] Je gewijzigde applicatie is via HTTPS bereikbaar en `/health/live` retourneert HTTP 200.
 
-1. Start de CI/CD-workflow automatisch?
-2. Slagen de CI-controles **voordat** de image wordt gepubliceerd?
-3. Staat image `v2` in je ACR?
-4. Is de Container App automatisch bijgewerkt naar `v2`?
-5. Draait de gewijzigde applicatie en retourneert `/health/live` HTTP 200?
-
-In ronde 1 mag je `v2` gebruiken. Commit-SHA-tags en de koppeling met `APP_COMMIT_SHA` volgen in ronde 2.
-
-**Tussenresultaat B:** een succesvolle codewijziging leidt automatisch tot het bouwen, publiceren en deployen van een nieuwe applicatieversie.
-
----
-
-## Definition of Done – Ronde 1
-
-- [ ] DotNOVI-image `v1` is via een **handmatig gestarte GitHub Actions-workflow** gepubliceerd naar ACR.
-- [ ] Ik heb dotNOVI **handmatig via de Azure Portal** gedeployed.
-- [ ] DotNOVI draait in Azure Container Apps en is bereikbaar via HTTPS.
-- [ ] `/version` en `/health/live` reageren met HTTP 200.
-- [ ] Container Apps kan de private image via een managed identity uit ACR ophalen.
-- [ ] De bestaande CI-controles moeten slagen **voordat** de nieuwe image wordt gepubliceerd en gedeployed.
-- [ ] GitHub Actions meldt zich met OIDC aan bij Azure.
-- [ ] Een codewijziging start automatisch de workflow die image `v2` bouwt, publiceert en deployt.
-- [ ] Je kunt in GitHub Actions en Azure aanwijzen welke nieuwe image wordt gebruikt.
-
-In deze ronde hoef je nog geen uitgebreide architectuurdocumentatie of zelfstandig foutonderzoek op te leveren.
-
-## Niet klaar binnen de lestijd?
-
-De 65 minuten zijn bedoeld om de keten samen met de docent voor het eerst werkend te krijgen. Als iets niet lukt, noteer **welke stap faalt** en **welke foutmelding je ziet**. Rond de werkende keten zo nodig na de les af voordat je aan ronde 2 begint.
-
-## Na de les – Ronde 2: Zelfstandig opnieuw opbouwen
-
-**[Ga naar de volledige huiswerkopdracht: Ronde 2 – Bouw het zelfstandig en verantwoord](./LES5_RONDE2.md).**
-
-In ronde 2 verwijder je de tijdelijke **Container App, Container Apps Environment en ACR**, en bouw je deze infrastructuur zelfstandig opnieuw op. Je mag de bestaande Resource Group, GitHub-identity, broncode en CI-workflow behouden.
-
-Dan gelden aanvullende eisen:
-
-- Herleidbare images met commit-SHA-tags in plaats van `v1`/`v2`.
-- Correcte koppeling tussen gepubliceerde image, `APP_COMMIT_SHA` en `/version`.
-- Beperkte toegangsrechten en veilige runtimeconfiguratie.
-- Aantonen dat falende kwaliteitscontroles deployment blokkeren.
-- Deploymentstatus, logs en een foutscenario onderzoeken.
-- De gekozen architectuur en configuratie reproduceerbaar documenteren.
-
-**Verwijder je oefenresources pas wanneer de werkende deployment uit ronde 1 is gecontroleerd.** Controleer ook aanvullende Azure-resources die kosten kunnen veroorzaken, zoals loggingresources.
-
-## Officiële documentatie
-
-- [Azure Container Registry](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-intro)
-- [Azure Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/overview)
-- [GitHub Actions – Manually running a workflow](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
-- [GitHub Actions met Azure Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/github-actions)
-- [Managed identity voor image pulls](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull)
+**Resultaat:** een succesvolle push leidt automatisch tot het controleren van je code, het bouwen en publiceren van een nieuwe Docker-image en het bijwerken van je bestaande Azure Container App.
