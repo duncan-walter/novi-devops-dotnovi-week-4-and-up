@@ -1,28 +1,26 @@
 # Technische hulp B – GitHub Actions uitbreiden met Azure-deployment
 
-> **Bij Praktijk B, opdracht B2.** Deze instructie hoort bij [LES5.md](./LES5.md). Je hebt de OIDC-voorbereidingsopdracht na les 4 voltooid en een werkende dotNOVI-deployment uit Praktijk A.
+> **Bij Praktijk B, opdracht B.2.** Deze instructie hoort bij [LES5.md](./LES5.md). Je hebt de OIDC-voorbereidingsopdracht na les 4 voltooid en een werkende dotNOVI-deployment uit Praktijk A.
 
 ## Wat ga je doen?
 
-Breid je **bestaande CI-workflow** uit. Na succesvolle tests en linting bouwt GitHub Actions een nieuwe image, publiceert deze naar jouw Azure Container Registry (ACR) en werkt de bestaande Container App bij.
+In Praktijk A heb je al een **handmatig gestarte GitHub Actions-workflow** gemaakt die image `v1` naar Azure Container Registry (ACR) publiceert. Breid nu je **bestaande CI-workflow** uit en **hergebruik de werkende publicatiestappen**. Na succesvolle tests en linting publiceert GitHub Actions image `v2` en werkt de bestaande Container App bij.
 
 Je gebruikt de eerder aangemaakte identity `id-github-dotnovi`, niet de identity `id-acr-pull-dotnovi`. Deze laatste is alleen bedoeld om vanuit Container Apps images op te halen.
 
-## 1. Geef de GitHub-identity pushrechten op ACR
+## 1. Hergebruik je publicatieworkflow uit Praktijk A
 
-1. Open jouw **Azure Container Registry**.
-2. Ga naar **Access control (IAM) → Add → Add role assignment**.
-3. Kies de rol **AcrPush**.
-4. Selecteer bij Members de **managed identity** `id-github-dotnovi`.
-5. Rond de roltoewijzing af **op de registry**, niet op de gehele subscription.
+Je hebt `id-github-dotnovi` in Praktijk **A.2** al `AcrPush` gegeven op jouw ACR. **Ken deze rechten niet opnieuw toe.**
 
-Deze instructie gaat uit van **RBAC Registry Permissions**, zoals ingesteld in Praktijk A. Bij een ABAC-registry is een andere repositorywriter-rol nodig.
+Neem de werkende authenticatie-, build- en publishstappen uit de handmatig gestarte workflow van **A.3** over in je bestaande CI-workflow. Publiceer in deze ronde tag **`v2`** in plaats van `v1`.
 
-> Je managed identity moet daarnaast al voldoende rechten hebben om de bestaande Container App bij te werken; dit heb je voorbereid na les 4. OIDC-login betekent niet automatisch dat je ook alle gewenste Azure-acties mag uitvoeren.
+Zorg dat de publicatiejob afhankelijk is van **alle verplichte test- en lintcontroles**. De aparte handmatig te starten workflow kan blijven bestaan, maar gebruik voor de automatische deployment je bestaande CI-workflow.
+
+De OIDC-identiteit moet voldoende rechten hebben om ook de bestaande Container App bij te werken. Die rechten heb je na les 4 voorbereid.
 
 ## 2. Vul de deploymentjob in
 
-Onderstaande YAML is een **gedeeltelijk jobfragment**. Voeg het toe onder `jobs:` in je bestaande workflow. Neem niet opnieuw een volledige CI-pipeline over.
+Onderstaande YAML is een **gedeeltelijk voorbeeld** van een job die publiceren en deployen combineert. Voeg de relevante stappen toe onder `jobs:` in je bestaande CI-workflow of gebruik afzonderlijke afhankelijke publish- en deployjobs. Maak niet opnieuw een CI-pipeline vanaf nul.
 
 ```yaml
   deploy:
@@ -45,25 +43,25 @@ Onderstaande YAML is een **gedeeltelijk jobfragment**. Voeg het toe onder `jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # TODO 1: Authenticate Docker to your Azure Container Registry.
-      # TODO 2: Build a Docker image and tag it as v2.
-      # TODO 3: Push the v2 image to ACR.
-      # TODO 4: Update your existing Azure Container App to use v2.
+      # TODO 1: Hergebruik de ACR-login uit Praktijk A.3.
+      # TODO 2: Hergebruik de Docker-build uit Praktijk A.3 (nu met tag v2).
+      # TODO 3: Hergebruik de ACR-push uit Praktijk A.3 (nu met tag v2).
+      # TODO 4: Werk de bestaande Container App bij naar de gepubliceerde image v2.
 ```
 
-- Pas `needs` aan je bestaande workflow aan. Staan test en lint in dezelfde job, gebruik dan de naam van die ene job.
+- Pas `needs` aan je bestaande workflow aan. Staan test en lint in dezelfde job, gebruik dan de naam van die ene job. Publicatie mag niet beginnen vóórdat deze controles slagen.
 - De branch in de `if`-voorwaarde moet overeenkomen met de branch in je **federated credential**. Gebruik een andere naam als je geen `main` hebt.
 - De GitHub Actions-secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` en `AZURE_SUBSCRIPTION_ID` heb je al tijdens de voorbereiding ingesteld.
 - Plaats **geen wachtwoorden, tokens of registry admin-credentials** in de YAML.
 
-## 3. Vul de vier TODO's zelf in
+## 3. Maak publiceren én deployen automatisch
 
 | Doel | Aanwijzing |
 | --- | --- |
-| Docker aanmelden bij ACR | Zoek de Azure CLI-opdracht `az acr login`. |
-| Image bouwen | Gebruik `docker build` met de volledige image-URL en de tag `v2`. |
-| Image publiceren | Gebruik `docker push`. |
-| Container App bijwerken | Zoek `az containerapp update --image` en geef naam en resource group mee. |
+| Docker aanmelden bij ACR | Hergebruik de werkende `az acr login`-stap uit Praktijk A.3. |
+| Image bouwen | Hergebruik je `docker build`-stap en geef de image tag `v2`. |
+| Image publiceren | Hergebruik `docker push` uit Praktijk A.3. |
+| Container App bijwerken | Zoek `az containerapp update --image`; geef de app-naam, Resource Group en de volledige image-URL mee. |
 
 De image heeft de vorm:
 
