@@ -79,7 +79,7 @@ Vervang de vaste tag `v2` door de **volledige Git-commit-SHA van de betreffende 
 De imageverwijzing heeft de vorm:
 
 ```text
-<jouw-acr-login-server>/dotnovi/:<volledige-commit-sha>
+<jouw-acr-login-server>/dotnovi:<volledige-commit-sha>
 ```
 
 ### 3.3 Geef de SHA door aan de applicatie
